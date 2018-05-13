@@ -7,6 +7,9 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -27,11 +30,17 @@ import java.util.List;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
+
     public LocationClient mLocationClient;
+
     private TextView positionText;
+
     private MapView mapView;
+
     private BaiduMap baiduMap;
+
     private boolean isFirstLocate = true;
+    Button location;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -43,6 +52,8 @@ public class MainActivity extends AppCompatActivity {
         baiduMap = mapView.getMap();//获取BaiduMap实例
         baiduMap.setMyLocationEnabled(true);//开启显示自身位置
         positionText = (TextView) findViewById(R.id.position_text_view);
+        location = (Button) findViewById(R.id.location);
+
         /*--------进行多个运行时权限的申请--------*/
         List<String> permissionList = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.
@@ -62,7 +73,29 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(MainActivity.this,permissions,1);
         }else {
             requestLocation();
+          isFirstLocate =true;
         }
+    }
+    private void navigateTo(BDLocation location){
+        //这里会存在再次打开时候没有更新到定位的情况
+        if (isFirstLocate){
+            Toast.makeText(this, "nav to " + location.getAddrStr(), Toast.LENGTH_SHORT).show();
+            LatLng ll = new LatLng(location.getLatitude(),location.getLongitude());
+            MapStatusUpdate update = MapStatusUpdateFactory.newLatLng(ll);//定位有时会出错，需要多次定位
+            baiduMap.animateMapStatus(update);
+          //  update = MapStatusUpdateFactory.zoomTo(16f);
+           // baiduMap.animateMapStatus(update);
+            //  update = MapStatusUpdateFactory.newLatLngZoom(ll,12.5f); 即放缩又定位
+            isFirstLocate = false;
+        }
+          /*使用MyLocationData.Builder封装当前位置，构造实例传入数据，完成后利用build生成MyLocationData实例，
+          最后在baiduMap中设置和传入；注意 要用setMyLocationEnabled()方法开启，也要记得关闭
+          * */
+        MyLocationData.Builder locationBuilder = new MyLocationData.Builder();
+        locationBuilder.latitude(location.getLatitude());
+        locationBuilder.longitude(location.getLongitude());
+        MyLocationData locationData = locationBuilder.build();
+        baiduMap.setMyLocationData(locationData);
     }
     private void requestLocation (){
         initLocation();
@@ -78,8 +111,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onPostResume() {
-        super.onPostResume();
+    protected void onResume() {
+        super.onResume();
         mapView.onResume();
     }
 
@@ -120,36 +153,30 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 //地图跳转到定位场所
-    private void navigateTo(BDLocation location){
-          if (isFirstLocate){
-              LatLng ll = new LatLng(location.getLatitude(),location.getLongitude());
-              MapStatusUpdate update = MapStatusUpdateFactory.newLatLng(ll);
-              baiduMap.animateMapStatus(update);
-              update = MapStatusUpdateFactory.zoomTo(12.5f);
-              baiduMap.animateMapStatus(update);
-              isFirstLocate = false;
-          }
-          /*使用MyLocationData.Builder封装当前位置，构造实例传入数据，完成后利用build生成MyLocationData实例，
-          最后在baiduMap中设置和传入；注意 要用setMyLocationEnabled()方法开启，也要记得关闭
-          * */
-        MyLocationData.Builder locationBuilder = new MyLocationData.Builder();
-          locationBuilder.latitude(location.getLatitude());
-          locationBuilder.longitude(location.getLongitude());
-          MyLocationData locationData = locationBuilder.build();
-          baiduMap.setMyLocationData(locationData);
-    }
+
     public class MyLocationListener implements BDLocationListener{
         @Override
-        public void onReceiveLocation(final BDLocation bdLocation) {
+        public void onReceiveLocation( final BDLocation bdLocation) {
            //将BDLocation对象传给定位navition方法，实现在地图上定位
             if (bdLocation.getLocType() == BDLocation.TypeGpsLocation
                     || bdLocation.getLocType() == BDLocation.TypeNetWorkLocation){
                 navigateTo(bdLocation);
             }
-
-            runOnUiThread (new Runnable(){//将线程切换到主线程进行UI操作
+            location.setOnClickListener(new View.OnClickListener() {//设置回到定位按钮
                 @Override
-                public void run() {
+                public void onClick(View view) {
+                    LatLng ll = new LatLng(bdLocation.getLatitude(),bdLocation.getLongitude());
+                    MapStatusUpdate update;
+                    update = MapStatusUpdateFactory.zoomTo(16f);
+                    baiduMap.animateMapStatus(update);//只会执行后一个
+                     update = MapStatusUpdateFactory.newLatLngZoom(ll,16f);
+                    baiduMap.animateMapStatus(update);
+
+                }
+            });
+          /*  runOnUiThread (new Runnable(){//将线程切换到主线程进行UI操作
+                @Override
+                public void run() {//使用百度地图确定位置和定位不能同时用，会出错
                     StringBuilder currentPosition = new StringBuilder();
                     currentPosition.append("纬度:").append(bdLocation.getLatitude()).append("\n");
                     currentPosition.append("经线：").append(bdLocation.getLongitude()).append("\n");
@@ -166,7 +193,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                     positionText.setText(currentPosition);
                 }
-            });
+            });*/
         }
         /*@Override
         public void onConnectHotSpotMessage(String s,int i ){
